@@ -1,5 +1,15 @@
 --慕课网离线日志分析相关笔记--
 
+日志数据内容：
+1）访问的系统属性： 操作系统、浏览器等等
+2）访问特征：点击的url、从哪个url跳转过来的(referer)、页面上的停留时间等
+3）访问信息：session_id、访问ip(访问城市)等
+
+
+输入：访问时间、访问URL、耗费的流量、访问IP地址信息
+输出：URL、cmsType(video/article)、cmsId(编号)、流量、ip、城市信息、访问时间、天
+
+
 数据处理流程
 1）数据采集
 	Flume： web日志写入到HDFS
@@ -44,3 +54,109 @@ cms_id bigint(10) not null,
 traffics bigint(20) not null,
 primary key (day, cms_id)
 );
+
+
+在Spark中，支持4种运行模式：
+1）Local：开发时使用
+2）Standalone： 是Spark自带的，如果一个集群是Standalone的话，那么就需要在多台机器上同时部署Spark环境
+3）YARN：建议大家在生产上使用该模式，统一使用YARN进行整个集群作业(MR、Spark)的资源调度
+4）Mesos
+
+不管使用什么模式，Spark应用程序的代码是一模一样的，只需要在提交的时候通过--master参数来指定我们的运行模式即可
+
+Client
+	Driver运行在Client端(提交Spark作业的机器)
+	Client会和请求到的Container进行通信来完成作业的调度和执行，Client是不能退出的
+	日志信息会在控制台输出：便于我们测试
+
+Cluster
+	Driver运行在ApplicationMaster中
+	Client只要提交完作业之后就可以关掉，因为作业已经在YARN上运行了
+	日志是在终端看不到的，因为日志是在Driver上，只能通过yarn logs -applicationIdapplication_id
+
+./bin/spark-submit \
+--class org.apache.spark.examples.SparkPi \
+--master yarn \
+--executor-memory 1G \
+--num-executors 1 \
+/home/hadoop/app/spark-2.1.0-bin-2.6.0-cdh5.7.0/examples/jars/spark-examples_2.11-2.1.0.jar \
+4
+
+
+此处的yarn就是我们的yarn client模式
+如果是yarn cluster模式的话，yarn-cluster
+
+
+Exception in thread "main" java.lang.Exception: When running with master 'yarn' either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.
+
+如果想运行在YARN之上，那么就必须要设置HADOOP_CONF_DIR或者是YARN_CONF_DIR
+
+1） export HADOOP_CONF_DIR=/home/hadoop/app/hadoop-2.6.0-cdh5.7.0/etc/hadoop
+2) $SPARK_HOME/conf/spark-env.sh
+
+
+./bin/spark-submit \
+--class org.apache.spark.examples.SparkPi \
+--master yarn-cluster \
+--executor-memory 1G \
+--num-executors 1 \
+/home/hadoop/app/spark-2.1.0-bin-2.6.0-cdh5.7.0/examples/jars/spark-examples_2.11-2.1.0.jar \
+4
+
+
+yarn logs -applicationId application_1495632775836_0002
+
+
+打包时要注意，pom.xml中需要添加如下plugin
+<plugin>
+    <artifactId>maven-assembly-plugin</artifactId>
+    <configuration>
+        <archive>
+            <manifest>
+                <mainClass></mainClass>
+            </manifest>
+        </archive>
+        <descriptorRefs>
+            <descriptorRef>jar-with-dependencies</descriptorRef>
+        </descriptorRefs>
+    </configuration>
+</plugin>
+
+mvn assembly:assembly
+
+
+
+./bin/spark-submit \
+--class com.imooc.log.SparkStatCleanJobYARN \
+--name SparkStatCleanJobYARN \
+--master yarn \
+--executor-memory 1G \
+--num-executors 1 \
+--files /home/hadoop/lib/ipDatabase.csv,/home/hadoop/lib/ipRegion.xlsx \
+/home/hadoop/lib/sql-1.0-jar-with-dependencies.jar \
+hdfs://hadoop001:8020/imooc/input/* hdfs://hadoop001:8020/imooc/clean
+
+注意：--files在spark中的使用
+
+spark.read.format("parquet").load("/imooc/clean/day=20170511/part-00000-71d465d1-7338-4016-8d1a-729504a9f95e.snappy.parquet").show(false)
+
+
+./bin/spark-submit \
+--class com.imooc.log.TopNStatJobYARN \
+--name TopNStatJobYARN \
+--master yarn \
+--executor-memory 1G \
+--num-executors 1 \
+/home/hadoop/lib/sql-1.0-jar-with-dependencies.jar \
+hdfs://hadoop001:8020/imooc/clean 20170511 
+
+
+
+
+调优点：
+1) 控制文件输出的大小： coalesce
+2) 分区字段的数据类型调整：spark.sql.sources.partitionColumnTypeInference.enabled
+3) 批量插入数据库数据，提交使用batch操作
+4）存储格式的选择：http://www.infoq.com/cn/articles/bigdata-store-choose/
+   压缩格式的选择：https://www.ibm.com/developerworks/cn/opensource/os-cn-hadoop-compression-analysis/
+5）调整并行度
