@@ -9,7 +9,7 @@ import scala.collection.mutable.ListBuffer
 /**
   *   TopN统计：运行在YARN之上
   */
-object TopNCourseJob {
+object TopNCourseJobYarn {
   def main(args: Array[String]): Unit = {
     if(args.length !=2) {
       println("Usage: TopNCourseJob <inputPath> <day>")
