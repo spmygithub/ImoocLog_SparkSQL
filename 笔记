@@ -151,6 +151,30 @@ spark.read.format("parquet").load("/imooc/clean/day=20170511/part-00000-71d465d1
 hdfs://hadoop001:8020/imooc/clean 20170511 
 
 
+spark数据加载：
+RDD  -> DataFrame -> SparkSQL
+RDD需要先定义schema，然后使用createDataFrame方法将RDD和schema信息关联创建成DF，
+然后使用DF的createOrReplaceTempView方法转换成SparkSQL用SQL语言进行查询等相应操作，
+如果使用外部数据源的方式加载数据则直接创建的是DF。
+eg：
+import org.apache.spark.sql.Row
+val masterRDD = masterLog.map(x => Row(x))
+import org.apache.spark.sql.types._
+val schemaString = "line"
+val fields = schemaString.split(" ").map(fieldName => StructField(fieldName, StringType, nullable = true))
+val schema = StructType(fields)
+val masterDF = spark.createDataFrame(masterRDD, schema)
+masterDF.show
+masterDF.createOrReplaceTempView("master_log")
+spark.sql("select * from master_log limit 10").show(false)
+
+
+JSON/Parquet
+val usersDF = spark.read.format("parquet").load("file:///home/hadoop/app/spark-2.1.0-bin-2.6.0-cdh5.7.0/examples/src/main/resources/users.parquet")
+usersDF.show
+
+
+spark.sql("select * from  parquet.`file:///home/hadoop/app/spark-2.1.0-bin-2.6.0-cdh5.7.0/examples/src/main/resources/users.parquet`").show
 
 
 调优点：
